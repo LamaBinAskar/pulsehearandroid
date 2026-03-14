@@ -161,14 +161,14 @@ class _PairWristbandScreenState extends State<PairWristbandScreen>
                       StreamSubscription<List<ScanResult>>? subscription =
                           FlutterBluePlus.scanResults.listen((results) async {
                         for (ScanResult r in results) {
-                          print('وجد جهاز: ${r.device.name ?? 'غير معروف'}');
-                          if (r.device.name.contains('ESP32') == true ||
-                              r.device.name.contains('XIAO') == true ||
-                              r.device.name.contains('Pulse') == true) {
+                          print('وجد جهاز: ${r.device.platformName}');
+                          if (r.device.platformName.contains('ESP32') ||
+                              r.device.platformName.contains('XIAO') ||
+                              r.device.platformName.contains('Pulse')) {
                             // اتصل
                             await r.device
                                 .connect(timeout: const Duration(seconds: 10));
-                            print('✅ متصل بـ ${r.device.name}');
+                            print('✅ متصل بـ ${r.device.platformName}');
 
                             // اذهب للـ Dashboard
                             Navigator.pushNamed(context, '/dashboard');

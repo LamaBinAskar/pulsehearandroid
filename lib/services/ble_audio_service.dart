@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'bluetooth_service.dart';
@@ -50,6 +51,8 @@ class BleAudioService extends ChangeNotifier {
     await _initNotifications();
     await _initSpeechToText();
     bleService.onSignalReceived = handleBleSignal;
+    // Auto-connect to ESP32 on app start — keeps retrying until connected
+    bleService.autoConnect();
     debugPrint('[BleAudioService] Initialized');
   }
 
@@ -78,6 +81,15 @@ class BleAudioService extends ChangeNotifier {
         debugPrint('[Notification] Tapped: ${details.payload}');
       },
     );
+
+    // Request notification permission on Android 13+
+    if (Platform.isAndroid) {
+      final status = await Permission.notification.status;
+      if (!status.isGranted) {
+        await Permission.notification.request();
+        debugPrint('[Notification] Android permission requested');
+      }
+    }
 
     // طلب إذن الإشعارات على iOS
     if (Platform.isIOS) {
