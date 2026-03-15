@@ -58,7 +58,8 @@ class YamnetClassifier {
     for (int i = 0; i < samples.length; i++) {
       if (i < nSamples) {
         final offset = i * 2;
-        final s = (pcmBytes[offset + 1] << 8) | pcmBytes[offset];
+        int s = (pcmBytes[offset + 1] << 8) | pcmBytes[offset];
+        if (s >= 32768) s -= 65536; // sign-extend to signed int16
         samples[i] = (s / 32768.0).clamp(-1.0, 1.0);
       } else {
         samples[i] = 0.0;

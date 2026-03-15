@@ -19,20 +19,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // إنشاء الخدمات
-    _bleService = BluetoothService();
+    _bleService   = BluetoothService();
     _audioService = BleAudioService(bleService: _bleService);
 
-    // تحديث الواجهة عند تغيير
     _audioService.addListener(_updateUI);
     _bleService.addListener(_updateUI);
   }
 
   void _updateUI() {
     setState(() {
-      _status = _audioService.isListening
-          ? 'يستمع...'
+      _status = _audioService.isProcessing
+          ? 'يحلل الصوت...'
           : (_bleService.isConnected ? 'متصل' : 'غير متصل');
+
       _lastDetection = _audioService.lastYamnetLabel.isNotEmpty
           ? 'آخر صوت: ${_audioService.lastYamnetLabel}'
           : _bleService.lastDetectedLabel.isNotEmpty
@@ -94,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 30),
 
-            // قسم الكلمات المفتاحية
+            // Keywords section
             Card(
               color: const Color(0xFFF5F5F5),
               child: Padding(
@@ -155,34 +154,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 20),
 
-            // زر اختبار
-            ElevatedButton(
-              onPressed: () async {
-                // محاكاة إشارة BG من ESP32
-                await _audioService.handleBleSignal('BG');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF005352),
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-              ),
-              child: const Text('اختبار YAMNet'),
-            ),
-
-            const SizedBox(height: 10),
-
-            if (_audioService.lastRecognizedText.isNotEmpty)
+            // Status card showing last YAMNet result
+            if (_audioService.lastYamnetLabel.isNotEmpty)
               Card(
                 color: Colors.amber[50],
                 child: Padding(
                   padding: const EdgeInsets.all(10),
                   child: Column(
                     children: [
-                      const Text('النص المعترف به:',
+                      const Text('آخر صوت مكتشف:',
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 5),
-                      Text(_audioService.lastRecognizedText),
+                      Text(_audioService.lastYamnetLabel,
+                          style: const TextStyle(fontSize: 16)),
                     ],
                   ),
                 ),

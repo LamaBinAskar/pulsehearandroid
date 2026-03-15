@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pulse_hear/views/bluetooth-asayel/bluetooth_search_screen.dart';
-import 'package:pulse_hear/views/soundlibrary-asayel/sound_library_screen.dart';
 import 'package:pulse_hear/services/ble_audio_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -13,6 +11,22 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.service.addListener(_onServiceChanged);
+  }
+
+  void _onServiceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.service.removeListener(_onServiceChanged);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,7 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 15,
                       offset: const Offset(0, 8),
                     ),
@@ -128,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               }
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.15),
+                              backgroundColor: Colors.white.withValues(alpha: 0.15),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -136,7 +150,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                             child: Text(
-                              widget.service.isConnected ? 'Connected' : 'Connect Wristband',
+                              widget.service.isConnected
+                                  ? 'Connected'
+                                  : 'Connect Wristband',
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
@@ -172,17 +188,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _buildIconCard(
                     'Speech-To-Text',
                     'assets/images/speech_to_text.png',
-                    () => print("Navigate to Speech-To-Text"),
+                    () => debugPrint("Navigate to Speech-To-Text"),
                   ),
                   _buildIconCard(
                     'Text-To-Speech',
                     'assets/images/text_to_speech.png',
-                    () => print("Navigate to Text-To-Speech"),
+                    () => debugPrint("Navigate to Text-To-Speech"),
                   ),
                   _buildIconCard(
                     'Modes',
                     'assets/images/modes.png',
-                    () => print("Navigate to Modes"),
+                    () => debugPrint("Navigate to Modes"),
                   ),
                 ],
               ),
@@ -200,19 +216,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 IconButton(
-                  icon:
-                      const Icon(Icons.home, color: Colors.white, size: 28),
-                  onPressed: () => print("Home tapped"),
+                  icon: const Icon(Icons.home, color: Colors.white, size: 28),
+                  onPressed: () => debugPrint("Home tapped"),
                 ),
                 IconButton(
                   icon: const Icon(Icons.contact_phone_rounded,
                       color: Colors.white54, size: 28),
-                  onPressed: () => print("Contacts tapped"),
+                  onPressed: () => debugPrint("Contacts tapped"),
                 ),
                 IconButton(
                   icon: const Icon(Icons.settings,
                       color: Colors.white54, size: 28),
-                  onPressed: () => print("Settings tapped"),
+                  onPressed: () => debugPrint("Settings tapped"),
                 ),
               ],
             ),
@@ -236,7 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 30,
               offset: const Offset(0, 6),
             ),

@@ -19,6 +19,7 @@ class BluetoothService extends ChangeNotifier {
   BluetoothCharacteristic? _keywordChar;
   BluetoothCharacteristic? _audioChar;
   StreamSubscription?      _scanSub;
+  StreamSubscription?      _isScanningSubscription;
   StreamSubscription?      _notifySub;
   StreamSubscription?      _audioNotifySub;
   StreamSubscription?      _connectionSub;
@@ -75,7 +76,8 @@ class BluetoothService extends ChangeNotifier {
         }
       });
 
-      FlutterBluePlus.isScanning.listen((scanning) {
+      await _isScanningSubscription?.cancel();
+      _isScanningSubscription = FlutterBluePlus.isScanning.listen((scanning) {
         if (!scanning && !isConnected) {
           isScanning = false;
           notifyListeners();
@@ -169,7 +171,7 @@ class BluetoothService extends ChangeNotifier {
     try {
       await _signalChar!.setNotifyValue(true);
       await _notifySub?.cancel();
-      _notifySub = _signalChar!.lastValueStream.listen((value) {
+      _notifySub = _signalChar!.onValueReceived.listen((value) {
         if (value.isEmpty) return;
         final signal = String.fromCharCodes(value).trim();
         debugPrint('[BLE] Signal: $signal');
@@ -186,7 +188,7 @@ class BluetoothService extends ChangeNotifier {
     try {
       await _audioChar!.setNotifyValue(true);
       await _audioNotifySub?.cancel();
-      _audioNotifySub = _audioChar!.lastValueStream.listen((value) {
+      _audioNotifySub = _audioChar!.onValueReceived.listen((value) {
         if (value.isEmpty) return;
         _handleAudioChunk(value);
       });
@@ -268,6 +270,7 @@ class BluetoothService extends ChangeNotifier {
   // ── Manual disconnect ────────────────────────────────────────
   Future<void> disconnect() async {
     _reconnectTimer?.cancel();
+    await _isScanningSubscription?.cancel();
     await _notifySub?.cancel();
     await _audioNotifySub?.cancel();
     await _scanSub?.cancel();
