@@ -164,8 +164,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          // 3. Features Grid
+          const SizedBox(height: 16),
+          // 3. Last Detection Card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 19),
+            child: _buildDetectionCard(),
+          ),
+          const SizedBox(height: 16),
+          // 4. Features Grid
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
@@ -232,6 +238,95 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetectionCard() {
+    final label     = widget.service.lastDetectedLabel;
+    final isProcessing = widget.service.isProcessing;
+
+    // Pick colour based on what was detected
+    Color  cardColor;
+    Color  textColor = Colors.white;
+    String displayText;
+    IconData icon;
+
+    if (isProcessing) {
+      cardColor   = const Color(0xFF3A3A6A);
+      displayText = 'Analyzing sound...';
+      icon        = Icons.graphic_eq;
+    } else if (label.isEmpty) {
+      cardColor   = const Color(0xFF3A3A6A);
+      displayText = 'Listening for sounds...';
+      icon        = Icons.hearing;
+    } else if (label.toUpperCase().contains('FIRE')) {
+      cardColor   = const Color(0xFFD32F2F);
+      displayText = label;
+      icon        = Icons.local_fire_department;
+    } else if (label.toUpperCase().contains('BABY')) {
+      cardColor   = const Color(0xFFF57C00);
+      displayText = label;
+      icon        = Icons.child_care;
+    } else {
+      cardColor   = const Color(0xFF1565C0);
+      displayText = label;
+      icon        = Icons.volume_up;
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: cardColor.withValues(alpha: 0.5),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: textColor, size: 32),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Last Detection',
+                  style: TextStyle(
+                    color: textColor.withValues(alpha: 0.75),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  displayText,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isProcessing)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            ),
         ],
       ),
     );

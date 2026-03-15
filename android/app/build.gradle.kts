@@ -25,7 +25,7 @@ android {
         applicationId = "com.example.pulse_hear"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 24          // Vosk requires API 24+; BLE CONNECT reliable from API 23+
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -46,4 +46,5 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.2.2")
+    implementation("com.alphacephei:vosk-android:0.3.47")
 }

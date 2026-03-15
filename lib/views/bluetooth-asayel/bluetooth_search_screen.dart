@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import '../../services/ble_audio_service.dart';
 
 class PairWristbandScreen extends StatefulWidget {
-  const PairWristbandScreen({super.key});
+  final BleAudioService service;
+  const PairWristbandScreen({super.key, required this.service});
 
   @override
   State<PairWristbandScreen> createState() => _PairWristbandScreenState();
@@ -58,7 +58,7 @@ class _PairWristbandScreenState extends State<PairWristbandScreen>
               height: 500,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF5A597D).withOpacity(0.4),
+                color: const Color(0xFF5A597D).withValues(alpha: 0.4),
               ),
             ),
           ),
@@ -70,7 +70,7 @@ class _PairWristbandScreenState extends State<PairWristbandScreen>
               height: 550,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF5A597D).withOpacity(0.6),
+                color: const Color(0xFF5A597D).withValues(alpha: 0.6),
               ),
             ),
           ),
@@ -98,7 +98,7 @@ class _PairWristbandScreenState extends State<PairWristbandScreen>
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(0xFF5A6CFF)
-                                    .withOpacity(0.4 * (1 - _controller.value)),
+                                    .withValues(alpha: 0.4 * (1 - _controller.value)),
                                 blurRadius: 60,
                                 spreadRadius: 20 * _controller.value,
                               ),
@@ -107,7 +107,7 @@ class _PairWristbandScreenState extends State<PairWristbandScreen>
                             // Pulsing outer ring
                             border: Border.all(
                               color: Colors.white
-                                  .withOpacity(1 - _controller.value),
+                                  .withValues(alpha: 1 - _controller.value),
                               width: 3,
                             ),
                           ),
@@ -152,41 +152,12 @@ class _PairWristbandScreenState extends State<PairWristbandScreen>
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('يبحث عن السوار...')),
                       );
+                      final nav = Navigator.of(context);
 
-                      // ابدأ Scan
-                      await FlutterBluePlus.startScan(
-                          timeout: const Duration(seconds: 8));
+                      // Use BluetoothService so services & audio stream are set up correctly
+                      await widget.service.bleService.startScan();
 
-                      // استمع للأجهزة
-                      StreamSubscription<List<ScanResult>>? subscription =
-                          FlutterBluePlus.scanResults.listen((results) async {
-                        for (ScanResult r in results) {
-                          print('وجد جهاز: ${r.device.platformName}');
-                          if (r.device.platformName.contains('ESP32') ||
-                              r.device.platformName.contains('XIAO') ||
-                              r.device.platformName.contains('Pulse')) {
-                            // اتصل
-                            await r.device
-                                .connect(timeout: const Duration(seconds: 10));
-                            print('✅ متصل بـ ${r.device.platformName}');
-
-                            // اذهب للـ Dashboard
-                            Navigator.pushNamed(context, '/dashboard');
-                            return;
-                          }
-                        }
-                      });
-
-                      // توقف بعد 8 ثوان
-                      await Future.delayed(const Duration(seconds: 8));
-                      await FlutterBluePlus.stopScan();
-                      await subscription?.cancel();
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content:
-                                Text('لم يُعثر على سوار، تأكد مفعّل ومفتوح')),
-                      );
+                      nav.pushNamed('/dashboard');
                     },
                     child: const Text(
                       'Pair Wristband',

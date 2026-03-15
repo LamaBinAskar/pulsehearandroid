@@ -1,12 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/vosk_keyword_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared iOS-style glassmorphism popup helper
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Shows a floating Cupertino-style menu anchored to the [anchorContext] widget.
 Future<void> showIosStyleMenu({
   required BuildContext anchorContext,
   required List<String> options,
@@ -70,12 +70,13 @@ class _IosMenuCard extends StatelessWidget {
         child: Container(
           width: 200,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.82),
+            color: Colors.white.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.5), width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 24,
                 spreadRadius: 2,
                 offset: const Offset(0, 8),
@@ -247,7 +248,8 @@ class IosDropdownField extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class KeywordsScreen extends StatefulWidget {
-  const KeywordsScreen({Key? key}) : super(key: key);
+  final VoskKeywordService service;
+  const KeywordsScreen({Key? key, required this.service}) : super(key: key);
 
   @override
   State<KeywordsScreen> createState() => _KeywordsScreenState();
@@ -268,6 +270,12 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
   void initState() {
     super.initState();
     filteredKeywords = List.from(keywords);
+    // Sync initial keywords to service
+    widget.service.setKeywords(keywords);
+  }
+
+  void _syncToService() {
+    widget.service.setKeywords(keywords);
   }
 
   void filterSearchResults(String query) {
@@ -386,6 +394,7 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
                       }
                       filterSearchResults(_searchController.text);
                     });
+                    _syncToService();
                     Navigator.pop(context);
                   },
                   child: Text('Save',
@@ -401,138 +410,168 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF191834),
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios,
-              color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Keywords',
-          style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            Text(
-              'Custom Keywords',
-              style: GoogleFonts.poppins(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF38385A),
-              ),
+    return ListenableBuilder(
+      listenable: widget.service,
+      builder: (context, _) {
+        final isListening = widget.service.isListening;
+        return Scaffold(
+          backgroundColor: const Color(0xFFF4F6F9),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF191834),
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios,
+                  color: Colors.white, size: 20),
+              onPressed: () => Navigator.pop(context),
             ),
-            const SizedBox(height: 5),
-            Text(
-              'Get alerted when you hear specific words',
+            title: Text(
+              'Keywords',
               style: GoogleFonts.poppins(
-                  fontSize: 14, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 20),
-
-            // Search bar
-            Container(
-              decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
               ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: filterSearchResults,
-                decoration: InputDecoration(
-                  hintText: 'search',
-                  hintStyle:
-                      GoogleFonts.poppins(color: Colors.grey.shade400),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 15),
-                  suffixIcon:
-                      Icon(Icons.search, color: Colors.grey.shade600),
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isListening ? Colors.greenAccent : Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      isListening ? 'Listening' : 'Off',
+                      style: GoogleFonts.poppins(
+                          fontSize: 11, color: Colors.white70),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-
-            // Add keyword button
-            Container(
-              width: 180,
-              height: 45,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE5E5EF),
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 5,
-                    offset: const Offset(0, 3),
+            ],
+          ),
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                Text(
+                  'Custom Keywords',
+                  style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF38385A),
                   ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(15),
-                  onTap: () => _showAddOrEditDialog(),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.add,
-                          color: Color(0xFF38385A), size: 20),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Add Keyword',
-                        style: GoogleFonts.poppins(
-                          color: const Color(0xFF38385A),
-                          fontWeight: FontWeight.w600,
-                        ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Get alerted when you hear specific words',
+                  style: GoogleFonts.poppins(
+                      fontSize: 14, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 20),
+
+                // Search bar
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: filterSearchResults,
+                    decoration: InputDecoration(
+                      hintText: 'search',
+                      hintStyle:
+                          GoogleFonts.poppins(color: Colors.grey.shade400),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 15),
+                      suffixIcon:
+                          Icon(Icons.search, color: Colors.grey.shade600),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-            // Grid
-            Expanded(
-              child: GridView.builder(
-                physics: const BouncingScrollPhysics(),
-                itemCount: filteredKeywords.length,
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 15,
-                  mainAxisSpacing: 15,
-                  childAspectRatio: 0.75,
+                // Add keyword button
+                Container(
+                  width: 180,
+                  height: 45,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E5EF),
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 5,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(15),
+                      onTap: () => _showAddOrEditDialog(),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add,
+                              color: Color(0xFF38385A), size: 20),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Add Keyword',
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF38385A),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                itemBuilder: (context, index) {
-                  final kw = filteredKeywords[index];
-                  return _buildKeywordCard(kw);
-                },
-              ),
+                const SizedBox(height: 20),
+
+                // Grid
+                Expanded(
+                  child: GridView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: filteredKeywords.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 15,
+                      mainAxisSpacing: 15,
+                      childAspectRatio: 0.75,
+                    ),
+                    itemBuilder: (context, index) {
+                      final kw = filteredKeywords[index];
+                      return _buildKeywordCard(kw);
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -547,7 +586,7 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -593,7 +632,10 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
             value: kw['lang'],
             options: const ['Arabic', 'English'],
             showLabel: true,
-            onSelected: (val) => setState(() => kw['lang'] = val),
+            onSelected: (val) {
+              setState(() => kw['lang'] = val);
+              _syncToService();
+            },
           ),
 
           const Divider(height: 15, thickness: 0.5),
@@ -605,7 +647,10 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
             value: kw['vib'],
             options: const ['Short', 'Medium', 'Long'],
             showLabel: true,
-            onSelected: (val) => setState(() => kw['vib'] = val),
+            onSelected: (val) {
+              setState(() => kw['vib'] = val);
+              _syncToService();
+            },
           ),
 
           const Spacer(),
@@ -616,20 +661,22 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
             children: [
               // Rounded checkbox active toggle
               GestureDetector(
-                onTap: () =>
-                    setState(() => kw['isActive'] = !kw['isActive']),
+                onTap: () {
+                  setState(() => kw['isActive'] = !kw['isActive']);
+                  _syncToService();
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 4),
                   decoration: BoxDecoration(
                     color: kw['isActive']
-                        ? activeGreen.withOpacity(0.12)
+                        ? activeGreen.withValues(alpha: 0.12)
                         : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: kw['isActive']
-                          ? activeGreen.withOpacity(0.4)
+                          ? activeGreen.withValues(alpha: 0.4)
                           : Colors.grey.shade300,
                       width: 1,
                     ),
@@ -643,7 +690,7 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
                         height: 16,
                         decoration: BoxDecoration(
                           color: kw['isActive']
-                              ? activeGreen.withOpacity(0.85)
+                              ? activeGreen.withValues(alpha: 0.85)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
@@ -696,6 +743,7 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
                         keywords.remove(kw);
                         filteredKeywords.remove(kw);
                       });
+                      _syncToService();
                     },
                     child: Container(
                       padding: const EdgeInsets.all(4),

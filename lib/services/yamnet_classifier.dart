@@ -1,45 +1,37 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 class YamnetClassifier {
   static const _modelPath = 'assets/models/yamnet.tflite';
-  static const _sampleRate = 16000;
   static const _frameLength = 15600; // 0.96 ثانية
 
   late final Interpreter _interpreter;
 
-  // YAMNet labels - أهم 521 تصنيف من AudioSet
-  // نستخدم فقط التصنيفات البشرية المهمة
+  // YAMNet only classifies BACKGROUND sounds here.
+  // Fire alarm and baby crying are detected directly by the ESP32 (Edge Impulse)
+  // and arrive as BLE signals "FIRE"/"BABY"/"MIXED" — NOT via this audio stream.
   final Map<int, String> importantLabels = {
-    0: 'SPEECH',
-    1: 'MALE_SPEECH',
-    2: 'FEMALE_SPEECH',
-    3: 'CHILD_SPEECH',
-    4: 'CONVERSATION',
-    5: 'NARRATION',
-    6: 'BABBLING',
-    7: 'SHOUT',
-    8: 'SCREAM',
-    9: 'YELL',
-    10: 'LAUGHTER',
-    11: 'CRY',
-    12: 'BABY_CRY',
-    13: 'WHIMPER',
-    14: 'MUSIC',
-    15: 'MUSICAL_INSTRUMENT',
-    23: 'DOG',
-    24: 'BARK',
-    38: 'SIREN',
-    39: 'CIVIL_DEFENSE_SIREN',
-    40: 'AMBULANCE',
-    41: 'POLICE_CAR',
-    65: 'ALARM',
-    66: 'SMOKE_ALARM',
-    67: 'FIRE_ALARM',
-    85: 'DOORBELL',
-    86: 'KNOCK',
-    108: 'TELEPHONE',
-    109: 'TELEPHONE_BELL_RINGING',
+    // ── Speech / Human voice ─────────────────
+    0:   'SPEECH',
+    6:   'SHOUT',
+    11:  'SCREAM',
+    13:  'LAUGHTER',
+    // ── Music ────────────────────────────────
+    137: 'MUSIC',
+    // ── Animals ──────────────────────────────
+    74:  'DOG',
+    75:  'BARK',
+    // ── Emergency sirens ─────────────────────
+    388: 'SIREN',
+    389: 'CIVIL_DEFENSE_SIREN',
+    390: 'AMBULANCE',
+    392: 'POLICE_CAR',
+    // ── Home sounds ──────────────────────────
+    461: 'DOORBELL',
+    465: 'KNOCK',
+    // ── Phone ────────────────────────────────
+    418: 'TELEPHONE',
+    419: 'TELEPHONE_BELL_RINGING',
   };
 
   Future<void> init() async {
@@ -47,7 +39,7 @@ class YamnetClassifier {
     // تحميل المودل
     final options = InterpreterOptions();
     _interpreter = await Interpreter.fromAsset(_modelPath, options: options);
-    print('[YAMNet] Model loaded successfully');
+    debugPrint('[YAMNet] Model loaded successfully');
   }
 
   // تجهيز الـ 15600 عينة من buffer الصوت
@@ -69,38 +61,35 @@ class YamnetClassifier {
     return samples;
   }
 
-  // تصنيف إطار واحد
+  // Run YAMNet on one audio frame
   Map<String, dynamic> classify(Uint8List pcmBytes) {
     final input = prepareInput(pcmBytes);
 
-    // 1D Float32List بحجم 15600
-    final inputShape = [_frameLength];
-    final inputs = [input.reshape(inputShape)];
-
-    // Output: [1, 521] scores
+    final inputs = [input.reshape([_frameLength])];
     final outputs = List.filled(521, 0.0).reshape([1, 521]);
-
     _interpreter.run(inputs, outputs);
 
-    // البحث عن أعلى score
+    // Search only among the important class indices.
+    // This way we always return a meaningful label even when
+    // the global winner is an unimportant class.
     double maxScore = 0;
-    int maxIndex = 0;
-    for (int i = 0; i < 521; i++) {
-      final score = outputs[0][i].toDouble();
+    int    maxIndex = -1;
+    for (final entry in importantLabels.entries) {
+      final score = outputs[0][entry.key].toDouble();
       if (score > maxScore) {
         maxScore = score;
-        maxIndex = i;
+        maxIndex = entry.key;
       }
     }
 
-    // الحصول على التصنيف
-    final label = importantLabels[maxIndex] ?? 'BACKGROUND_$maxIndex';
-    final confidence = maxScore;
+    final label = maxIndex >= 0
+        ? (importantLabels[maxIndex] ?? 'BACKGROUND')
+        : 'BACKGROUND';
 
     return {
-      'label': label,
-      'confidence': confidence,
-      'index': maxIndex,
+      'label':      label,
+      'confidence': maxScore,
+      'index':      maxIndex,
     };
   }
 

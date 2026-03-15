@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../views/auth-elaf/start_screen.dart';
- // We'll create this next
+// We'll create this next
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -34,14 +34,14 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Container(
               width: 300,
               height: 300,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF604F8E), // Purple center
-                    const Color(0xFF191834), // Dark Navy edge
+                    Color(0xFF604F8E), // Purple center
+                    Color(0xFF191834), // Dark Navy edge
                   ],
-                  stops: const [0.0, 1.0],
+                  stops: [0.0, 1.0],
                 ),
               ),
               child: Center(

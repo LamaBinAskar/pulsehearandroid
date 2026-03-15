@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothService;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp show BluetoothService;
 
+// ignore_for_file: constant_identifier_names
 class BluetoothService extends ChangeNotifier {
   // UUIDs — must match Arduino exactly
   static const String SERVICE_UUID      = '12345678-1234-1234-1234-123456789abc';
@@ -245,6 +246,19 @@ class BluetoothService extends ChangeNotifier {
       debugPrint('[BLE] Sent result: $msg');
     } catch (e) {
       debugPrint('[BLE] Send result error: $e');
+    }
+  }
+
+  // ── Send keyword alert to ESP32 ─────────────────────────────
+  Future<void> sendKeywordAlert(String keyword) async {
+    if (_keywordChar == null || !isConnected) return;
+    try {
+      final msg = 'KW:$keyword';
+      final bytes = Uint8List.fromList(msg.codeUnits);
+      await _keywordChar!.write(bytes, withoutResponse: false);
+      debugPrint('[BLE] Sent keyword alert: $msg');
+    } catch (e) {
+      debugPrint('[BLE] Send keyword alert error: $e');
     }
   }
 

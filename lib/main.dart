@@ -9,13 +9,25 @@ import 'views/soundlibrary-asayel/sound_library_screen.dart';
 import 'views/keywords-elaf/add_keywords_screen.dart';
 import 'services/ble_audio_service.dart';
 import 'services/bluetooth_service.dart';
+import 'services/sound_library_service.dart';
+import 'services/vosk_keyword_service.dart';
 
 // Services created once here — not inside build()
-final BluetoothService _bluetoothService = BluetoothService();
-final BleAudioService  _bleService       = BleAudioService(bleService: _bluetoothService);
+final BluetoothService    _bluetoothService    = BluetoothService();
+final SoundLibraryService _soundLibraryService = SoundLibraryService();
+final VoskKeywordService  _voskKeywordService  = VoskKeywordService();
+final BleAudioService     _bleService          = BleAudioService(
+  bleService:   _bluetoothService,
+  soundLibrary: _soundLibraryService,
+  voskService:  _voskKeywordService,
+);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  _voskKeywordService.init();
+  _voskKeywordService.onKeywordDetected = (keyword) {
+    _bleService.sendKeywordAlert(keyword);
+  };
   runApp(const MyApp());
 }
 
@@ -36,10 +48,10 @@ class MyApp extends StatelessWidget {
         '/start':     (context) => const StartScreen(),
         '/signin':    (context) => const SignInScreen(),
         '/signup':    (context) => const SignUpScreen(),
-        '/bluetooth': (context) => const PairWristbandScreen(),
+        '/bluetooth': (context) => PairWristbandScreen(service: _bleService),
         '/dashboard': (context) => DashboardScreen(service: _bleService),
-        '/sounds':    (context) => const SoundLibraryScreen(),
-        '/keywords':  (context) => const KeywordsScreen(),
+        '/sounds':    (context) => SoundLibraryScreen(service: _soundLibraryService),
+        '/keywords':  (context) => KeywordsScreen(service: _voskKeywordService),
       },
     );
   }

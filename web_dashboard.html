@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PulseHear — Live Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0d1a;
+      --surface:     #14142b;
+      --surface2:    #1c1c38;
+      --border:      rgba(255,255,255,0.07);
+      --text:        #e8e8f0;
+      --text-dim:    #6b6b8a;
+      --accent:      #6c63ff;
+      --accent2:     #a78bfa;
+
+      --emergency:   #ff4560;
+      --baby:        #f472b6;
+      --home:        #38bdf8;
+      --animal:      #4ade80;
+      --music:       #c084fc;
+      --speech:      #94a3b8;
+      --unknown:     #64748b;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ─── Scrollbar ────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+
+    /* ─── Header ───────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13,13,26,0.9);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .mode-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-dim);
+    }
+
+    .mode-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse-dot 2s infinite;
+    }
+
+    .mode-dot.disconnected { background: var(--text-dim); animation: none; }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    .ws-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    .ws-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 12px;
+      color: var(--text);
+      font-size: 13px;
+      width: 200px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .ws-input:focus { border-color: var(--accent); }
+
+    .ws-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .ws-btn:hover { opacity: 0.85; }
+
+    /* ─── Layout ───────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      grid-template-rows: auto 1fr;
+      gap: 24px;
+      padding: 28px 32px;
+      min-height: calc(100vh - 73px);
+    }
+
+    /* ─── Current Detection Card ───────────────────────── */
+    .current-card {
+      grid-column: 1;
+      grid-row: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      display: flex;
+      align-items: center;
+      gap: 40px;
+      min-height: 220px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color .4s;
+    }
+
+    .current-card::before {
+      content: '';
+      position: absolute;
+      top: -60%;
+      right: -10%;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--glow-color, var(--accent)) 0%, transparent 70%);
+      opacity: 0.08;
+      transition: background .4s;
+      pointer-events: none;
+    }
+
+    .detection-visual {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 2px solid var(--ring-color, var(--accent));
+      opacity: 0;
+      animation: ring-expand 2.5s ease-out infinite;
+    }
+
+    .ring:nth-child(2) { animation-delay: 0.8s; }
+    .ring:nth-child(3) { animation-delay: 1.6s; }
+
+    @keyframes ring-expand {
+      0%   { width: 80px; height: 80px; opacity: 0.6; top: 0; left: 0; }
+      100% { width: 160px; height: 160px; opacity: 0; top: -40px; left: -40px; }
+    }
+
+    .detection-emoji {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+      position: relative;
+      z-index: 1;
+      border: 2px solid var(--border);
+      transition: border-color .4s, background .4s;
+    }
+
+    .detection-info { flex: 1; }
+
+    .detection-label-small {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .detection-label-big {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+      margin-bottom: 16px;
+      transition: color .4s;
+    }
+
+    .detection-category {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(108, 99, 255, 0.15);
+      color: var(--accent2);
+      margin-bottom: 16px;
+      transition: background .4s, color .4s;
+    }
+
+    .confidence-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .confidence-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+
+    .confidence-track {
+      flex: 1;
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width .6s cubic-bezier(.4,0,.2,1), background .4s;
+      width: 0%;
+    }
+
+    .confidence-pct {
+      font-size: 13px;
+      font-weight: 700;
+      min-width: 40px;
+      text-align: right;
+      color: var(--accent2);
+    }
+
+    .detection-time {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* ─── Stats Cards Row ──────────────────────────────── */
+    .stats-row {
+      grid-column: 1;
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      align-content: start;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-weight: 500;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-value {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .stat-value.green  { color: #4ade80; }
+    .stat-value.red    { color: var(--emergency); }
+    .stat-value.purple { color: var(--accent2); }
+    .stat-value.blue   { color: var(--home); }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+
+    /* Category breakdown */
+    .category-card {
+      grid-column: 1 / -1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .category-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+    }
+
+    .category-bars { display: flex; flex-direction: column; gap: 12px; }
+
+    .cat-row { display: flex; align-items: center; gap: 12px; }
+
+    .cat-name {
+      width: 110px;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .cat-track {
+      flex: 1;
+      height: 8px;
+      background: var(--surface2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .cat-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width .8s cubic-bezier(.4,0,.2,1);
+      width: 0%;
+    }
+
+    .cat-count {
+      width: 30px;
+      text-align: right;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-dim);
+    }
+
+    /* ─── Right Column ─────────────────────────────────── */
+    .right-col {
+      grid-column: 2;
+      grid-row: 1 / 3;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ─── Live Feed ────────────────────────────────────── */
+    .feed-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .feed-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .feed-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .feed-clear {
+      font-size: 12px;
+      color: var(--text-dim);
+      cursor: pointer;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      transition: color .2s;
+    }
+    .feed-clear:hover { color: var(--text); }
+
+    .feed-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 8px 0;
+      max-height: 500px;
+    }
+
+    .feed-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      animation: slide-in .3s ease;
+      transition: background .15s;
+    }
+
+    .feed-item:hover { background: var(--surface2); }
+    .feed-item:last-child { border-bottom: none; }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .feed-emoji {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .feed-info { flex: 1; min-width: 0; }
+
+    .feed-label {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .feed-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .feed-conf {
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* ─── Demo Controls ────────────────────────────────── */
+    .demo-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .demo-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 14px;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .demo-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 4px;
+      cursor: pointer;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text);
+      transition: background .2s, border-color .2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .demo-btn:hover { background: rgba(108,99,255,0.15); border-color: var(--accent); }
+    .demo-btn span:first-child { font-size: 20px; }
+
+    /* ─── Responsive ───────────────────────────────────── */
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+      }
+      .right-col { grid-column: 1; grid-row: 3; }
+      .stats-row { grid-row: 2; }
+      .feed-list { max-height: 300px; }
+    }
+
+    @media (max-width: 600px) {
+      header { padding: 14px 16px; flex-wrap: wrap; gap: 12px; }
+      .layout { padding: 16px; gap: 16px; }
+      .current-card { flex-direction: column; text-align: center; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .detection-label-big { font-size: 28px; }
+      .ws-input { width: 140px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">👂</div>
+    PulseHear
+  </div>
+  <div class="header-right">
+    <div class="mode-badge" id="modeBadge">
+      <div class="mode-dot" id="modeDot"></div>
+      <span id="modeText">Demo Mode</span>
+    </div>
+    <div class="ws-form">
+      <input class="ws-input" id="wsUrl" type="text" placeholder="ws://localhost:8765" />
+      <button class="ws-btn" id="wsBtn" onclick="toggleWs()">Connect</button>
+    </div>
+  </div>
+</header>
+
+<!-- ─── Main Layout ─────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- Current Detection -->
+  <div class="current-card" id="currentCard">
+    <div class="detection-visual">
+      <div class="ring" id="ring1" style="--ring-color: var(--accent)"></div>
+      <div class="ring" id="ring2" style="--ring-color: var(--accent)"></div>
+      <div class="ring" id="ring3" style="--ring-color: var(--accent)"></div>
+      <div class="detection-emoji" id="detEmoji">🎙️</div>
+    </div>
+    <div class="detection-info">
+      <div class="detection-label-small">Last Detection</div>
+      <div class="detection-label-big" id="detLabel">Listening...</div>
+      <div class="detection-category" id="detCategory">—</div>
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence</span>
+        <div class="confidence-track">
+          <div class="confidence-fill" id="confFill"></div>
+        </div>
+        <span class="confidence-pct" id="confPct">—</span>
+      </div>
+    </div>
+    <div class="detection-time" id="detTime">—</div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Detections</div>
+      <div class="stat-value purple" id="statTotal">0</div>
+      <div class="stat-sub">since session start</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Alerts</div>
+      <div class="stat-value red" id="statAlerts">0</div>
+      <div class="stat-sub">fire, baby, siren</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Last 60 s</div>
+      <div class="stat-value green" id="statRecent">0</div>
+      <div class="stat-sub">detections</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Top Sound</div>
+      <div class="stat-value blue" style="font-size:20px; padding-top:6px" id="statTop">—</div>
+      <div class="stat-sub" id="statTopCount"></div>
+    </div>
+
+    <!-- Category breakdown -->
+    <div class="category-card">
+      <div class="category-title">Detections by Category</div>
+      <div class="category-bars" id="catBars">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column -->
+  <div class="right-col">
+
+    <!-- Live Feed -->
+    <div class="feed-card">
+      <div class="feed-header">
+        <div class="feed-title">Live Feed</div>
+        <button class="feed-clear" onclick="clearFeed()">Clear</button>
+      </div>
+      <div class="feed-list" id="feedList">
+        <div style="padding: 40px 20px; text-align:center; color: var(--text-dim); font-size: 14px;">
+          Waiting for detections...
+        </div>
+      </div>
+    </div>
+
+    <!-- Demo Controls -->
+    <div class="demo-card">
+      <div class="demo-title">Simulate Detection</div>
+      <div class="demo-grid" id="demoGrid"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── Sound definitions ──────────────────────────────────────
+const SOUNDS = {
+  'FIRE ALARM':   { emoji: '🔥', color: '#ff4560', cat: 'Emergency', alert: true  },
+  'SIREN':        { emoji: '🚨', color: '#ff6b35', cat: 'Emergency', alert: true  },
+  'AMBULANCE':    { emoji: '🚑', color: '#ff8c42', cat: 'Emergency', alert: true  },
+  'POLICE':       { emoji: '🚔', color: '#ffa552', cat: 'Emergency', alert: true  },
+  'SMOKE ALARM':  { emoji: '💨', color: '#ff9a3c', cat: 'Emergency', alert: true  },
+  'BABY CRY':     { emoji: '👶', color: '#f472b6', cat: 'Baby',      alert: true  },
+  'CRY':          { emoji: '😢', color: '#e879f9', cat: 'Baby',      alert: true  },
+  'SCREAM':       { emoji: '😱', color: '#c084fc', cat: 'Alert',     alert: true  },
+  'DOG BARK':     { emoji: '🐕', color: '#4ade80', cat: 'Animal',    alert: false },
+  'DOORBELL':     { emoji: '🔔', color: '#38bdf8', cat: 'Home',      alert: false },
+  'KNOCK':        { emoji: '🚪', color: '#22d3ee', cat: 'Home',      alert: false },
+  'PHONE RING':   { emoji: '📞', color: '#67e8f9', cat: 'Home',      alert: false },
+  'MUSIC':        { emoji: '🎵', color: '#a78bfa', cat: 'Music',     alert: false },
+  'SPEECH':       { emoji: '💬', color: '#94a3b8', cat: 'Speech',    alert: false },
+  'SHOUT':        { emoji: '📢', color: '#fb923c', cat: 'Speech',    alert: false },
+};
+
+const CATEGORIES = {
+  'Emergency': '#ff4560',
+  'Baby':      '#f472b6',
+  'Alert':     '#c084fc',
+  'Animal':    '#4ade80',
+  'Home':      '#38bdf8',
+  'Music':     '#a78bfa',
+  'Speech':    '#94a3b8',
+};
+
+// ─── State ──────────────────────────────────────────────────
+let history    = [];
+let catCounts  = {};
+let labelCounts = {};
+let ws         = null;
+let demoTimer  = null;
+
+// ─── Render helpers ─────────────────────────────────────────
+function soundInfo(label) {
+  return SOUNDS[label] || { emoji: '🔊', color: '#6c63ff', cat: 'Unknown', alert: false };
+}
+
+function now() {
+  const d = new Date();
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatAgo(ts) {
+  const secs = Math.floor((Date.now() - ts) / 1000);
+  if (secs < 60)  return `${secs}s ago`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  return `${Math.floor(secs / 3600)}h ago`;
+}
+
+// ─── Main detection handler ──────────────────────────────────
+function onDetection(label, confidence) {
+  const info = soundInfo(label);
+  const ts   = Date.now();
+  history.unshift({ label, confidence, info, ts });
+  if (history.length > 200) history.pop();
+
+  // Update counts
+  catCounts[info.cat]   = (catCounts[info.cat]   || 0) + 1;
+  labelCounts[label]    = (labelCounts[label]     || 0) + 1;
+
+  updateCurrentCard(label, confidence, info, ts);
+  updateFeed();
+  updateStats();
+  updateCategoryBars();
+}
+
+// ─── Current detection card ──────────────────────────────────
+function updateCurrentCard(label, confidence, info, ts) {
+  const card  = document.getElementById('currentCard');
+  const emoji = document.getElementById('detEmoji');
+  const lbl   = document.getElementById('detLabel');
+  const cat   = document.getElementById('detCategory');
+  const fill  = document.getElementById('confFill');
+  const pct   = document.getElementById('confPct');
+  const time  = document.getElementById('detTime');
+
+  // Colors
+  card.style.borderColor = info.color + '55';
+  card.style.setProperty('--glow-color', info.color);
+  document.querySelectorAll('.ring').forEach(r => r.style.setProperty('--ring-color', info.color));
+
+  emoji.textContent = info.emoji;
+  emoji.style.borderColor = info.color + '88';
+  emoji.style.background  = info.color + '18';
+
+  lbl.textContent  = label;
+  lbl.style.color  = info.color;
+
+  cat.textContent  = info.cat;
+  cat.style.background = info.color + '20';
+  cat.style.color      = info.color;
+
+  const pctVal = Math.round(confidence * 100);
+  fill.style.width = pctVal + '%';
+  fill.style.background = `linear-gradient(90deg, ${info.color}aa, ${info.color})`;
+  pct.textContent  = pctVal + '%';
+  pct.style.color  = info.color;
+
+  time.textContent = now();
+}
+
+// ─── Feed ────────────────────────────────────────────────────
+function updateFeed() {
+  const list = document.getElementById('feedList');
+  if (history.length === 0) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-dim);font-size:14px">Waiting for detections...</div>';
+    return;
+  }
+
+  list.innerHTML = history.slice(0, 60).map(h => `
+    <div class="feed-item">
+      <div class="feed-emoji" style="background:${h.info.color}18; border: 1px solid ${h.info.color}33">
+        ${h.info.emoji}
+      </div>
+      <div class="feed-info">
+        <div class="feed-label" style="color:${h.info.color}">${h.label}</div>
+        <div class="feed-meta">${h.info.cat} · ${formatAgo(h.ts)}</div>
+      </div>
+      <div class="feed-conf" style="color:${h.info.color}">${Math.round(h.confidence * 100)}%</div>
+    </div>
+  `).join('');
+}
+
+// ─── Stats ───────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('statTotal').textContent = history.length;
+
+  const alerts = history.filter(h => h.info.alert).length;
+  document.getElementById('statAlerts').textContent = alerts;
+
+  const minute = Date.now() - 60000;
+  const recent = history.filter(h => h.ts > minute).length;
+  document.getElementById('statRecent').textContent = recent;
+
+  // Top sound
+  let topLabel = '—', topCount = 0;
+  for (const [l, c] of Object.entries(labelCounts)) {
+    if (c > topCount) { topLabel = l; topCount = c; }
+  }
+  const top = document.getElementById('statTop');
+  const topInfo = soundInfo(topLabel);
+  top.textContent  = topLabel === '—' ? '—' : topInfo.emoji + ' ' + topLabel;
+  top.style.color  = topLabel === '—' ? 'var(--home)' : topInfo.color;
+  document.getElementById('statTopCount').textContent = topCount > 0 ? `${topCount} times` : '';
+}
+
+// ─── Category bars ───────────────────────────────────────────
+function updateCategoryBars() {
+  const total = Object.values(catCounts).reduce((a, b) => a + b, 0) || 1;
+  const bars  = document.getElementById('catBars');
+
+  const entries = Object.entries(CATEGORIES).map(([cat, color]) => ({
+    cat, color, count: catCounts[cat] || 0
+  })).sort((a, b) => b.count - a.count);
+
+  bars.innerHTML = entries.map(({ cat, color, count }) => `
+    <div class="cat-row">
+      <div class="cat-name">
+        <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>
+        ${cat}
+      </div>
+      <div class="cat-track">
+        <div class="cat-fill" style="width:${(count/total*100).toFixed(1)}%;background:${color}"></div>
+      </div>
+      <div class="cat-count">${count}</div>
+    </div>
+  `).join('');
+}
+
+// ─── Feed controls ───────────────────────────────────────────
+function clearFeed() {
+  history    = [];
+  catCounts  = {};
+  labelCounts = {};
+  updateFeed();
+  updateStats();
+  updateCategoryBars();
+  // Reset current card
+  document.getElementById('detLabel').textContent   = 'Listening...';
+  document.getElementById('detLabel').style.color    = 'var(--text)';
+  document.getElementById('detCategory').textContent = '—';
+  document.getElementById('detEmoji').textContent    = '🎙️';
+  document.getElementById('confFill').style.width    = '0%';
+  document.getElementById('confPct').textContent     = '—';
+  document.getElementById('detTime').textContent     = '—';
+  document.getElementById('currentCard').style.borderColor = 'var(--border)';
+}
+
+// ─── Demo simulation ─────────────────────────────────────────
+const DEMO_SOUNDS = [
+  ['DOORBELL',   0.88], ['DOG BARK',  0.76], ['MUSIC',      0.65],
+  ['SPEECH',     0.72], ['SIREN',     0.91], ['FIRE ALARM', 0.95],
+  ['BABY CRY',   0.87], ['KNOCK',     0.79], ['PHONE RING', 0.83],
+  ['SCREAM',     0.82], ['AMBULANCE', 0.90], ['SHOUT',      0.71],
+];
+
+function buildDemoButtons() {
+  const grid = document.getElementById('demoGrid');
+  grid.innerHTML = DEMO_SOUNDS.slice(0, 12).map(([label, conf]) => {
+    const info = soundInfo(label);
+    return `
+      <button class="demo-btn" onclick="onDetection('${label}', ${conf + (Math.random() - 0.5) * 0.1})">
+        <span>${info.emoji}</span>
+        <span>${label}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function startDemo() {
+  stopDemo();
+  function fire() {
+    const [label, baseConf] = DEMO_SOUNDS[Math.floor(Math.random() * DEMO_SOUNDS.length)];
+    const conf = Math.max(0.4, Math.min(0.99, baseConf + (Math.random() - 0.5) * 0.15));
+    onDetection(label, conf);
+    demoTimer = setTimeout(fire, 2500 + Math.random() * 5000);
+  }
+  fire();
+}
+
+function stopDemo() {
+  if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
+}
+
+// ─── WebSocket ───────────────────────────────────────────────
+// Expected JSON format from your backend:
+// { "label": "DOG BARK", "confidence": 0.85 }
+// OR the raw "RESULT:DOG BARK" string
+
+function toggleWs() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.close();
+    return;
+  }
+  const url = document.getElementById('wsUrl').value.trim();
+  if (!url) return;
+
+  try {
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      stopDemo();
+      setMode('live', 'Live — ' + url);
+      document.getElementById('wsBtn').textContent = 'Disconnect';
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        // Try JSON first: { label, confidence }
+        const msg = JSON.parse(e.data);
+        if (msg.label) onDetection(msg.label, msg.confidence ?? 0.8);
+      } catch {
+        // Try plain text: "RESULT:DOG BARK" or just "DOG BARK"
+        const text = e.data.trim();
+        const label = text.startsWith('RESULT:') ? text.slice(7).trim() : text;
+        if (label) onDetection(label, 0.8);
+      }
+    };
+
+    ws.onclose = () => {
+      setMode('demo', 'Demo Mode');
+      document.getElementById('wsBtn').textContent = 'Connect';
+      startDemo();
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  } catch (e) {
+    console.error('WS error:', e);
+  }
+}
+
+function setMode(mode, label) {
+  const dot  = document.getElementById('modeDot');
+  const text = document.getElementById('modeText');
+  text.textContent = label;
+  if (mode === 'live') {
+    dot.style.background = '#4ade80';
+    dot.classList.remove('disconnected');
+  } else {
+    dot.style.background = '#6c63ff';
+    dot.classList.remove('disconnected');
+  }
+}
+
+// ─── Tick: refresh "X ago" every 15s ────────────────────────
+setInterval(() => { if (history.length > 0) updateFeed(); }, 15000);
+// Tick: refresh "last 60s" stat every 5s
+setInterval(updateStats, 5000);
+
+// ─── Init ────────────────────────────────────────────────────
+buildDemoButtons();
+updateCategoryBars();
+startDemo();
+</script>
+</body>
+</html>
