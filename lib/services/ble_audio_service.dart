@@ -1,46 +1,31 @@
 // ble_audio_service.dart
-// PulseHear v29 - iOS Compatible
-import 'dart:async';
+// PulseHear v30 - Receives audio from ESP32, runs YAMNet, sends result back
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'bluetooth_service.dart';
 import 'yamnet_classifier.dart';
 
 class BleAudioService extends ChangeNotifier {
   final BluetoothService bleService;
   final YamnetClassifier _yamnet = YamnetClassifier();
-  final AudioRecorder _recorder = AudioRecorder();
-  final stt.SpeechToText _speechToText = stt.SpeechToText();
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  bool isListening = false;
-  String lastYamnetLabel = '';
-  String lastRecognizedText = '';
-  bool _speechInitialized = false;
+  bool   isProcessing     = false;
+  String lastYamnetLabel  = '';
+  String lastDetectedLabel = '';
 
-  List<String> keywords = [
-    'ساعدني',
-    'نجدة',
-    'حريق',
-    'ماء',
-    'خطر',
-    'help',
-    'fire',
-  ];
-
-    BleAudioService({required this.bleService}) {
-          _init();
+  BleAudioService({required this.bleService}) {
+    _init();
   }
 
   // Getters for dashboard_screen.dart compatibility
   bool get isConnected => bleService.isConnected;
   String get deviceName => bleService.deviceName;
+
   Future<void> connectToESP32(String name) async {
     await bleService.startScan();
     notifyListeners();
@@ -49,19 +34,22 @@ class BleAudioService extends ChangeNotifier {
   Future<void> _init() async {
     await _yamnet.init();
     await _initNotifications();
-    await _initSpeechToText();
-    bleService.onSignalReceived = handleBleSignal;
-    // Auto-connect to ESP32 on app start — keeps retrying until connected
+
+    // Called when ESP32 sends a text signal (not used for FIRE/BABY anymore,
+    // but kept in case ESP32 sends connection-status messages)
+    bleService.onSignalReceived = _handleTextSignal;
+
+    // Called when ESP32 streams audio bytes for YAMNet classification
+    bleService.onAudioReceived = _handleAudioFromESP32;
+
     bleService.autoConnect();
     debugPrint('[BleAudioService] Initialized');
   }
 
   Future<void> _initNotifications() async {
-    // Android settings
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // iOS settings
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -82,213 +70,124 @@ class BleAudioService extends ChangeNotifier {
       },
     );
 
-    // Request notification permission on Android 13+
     if (Platform.isAndroid) {
       final status = await Permission.notification.status;
       if (!status.isGranted) {
         await Permission.notification.request();
-        debugPrint('[Notification] Android permission requested');
       }
     }
 
-    // طلب إذن الإشعارات على iOS
     if (Platform.isIOS) {
       await _notifications
           .resolvePlatformSpecificImplementation<
               IOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(
-            alert: true,
-            badge: true,
-            sound: true,
-          );
+          ?.requestPermissions(alert: true, badge: true, sound: true);
     }
   }
 
-  Future<void> _initSpeechToText() async {
-    try {
-      _speechInitialized = await _speechToText.initialize(
-        onStatus: (status) => debugPrint('[SpeechToText] Status: $status'),
-        onError: (error) => debugPrint('[SpeechToText] Error: $error'),
-      );
-      if (_speechInitialized) {
-        debugPrint('[SpeechToText] Initialized successfully');
-      }
-    } catch (e) {
-      debugPrint('[SpeechToText] Init error: $e');
-    }
-  }
-
-  Future<void> handleBleSignal(String signal) async {
+  // ── Handle text signals from ESP32 (BLE connected status etc.) ──
+  Future<void> _handleTextSignal(String signal) async {
     debugPrint('[BleAudioService] Signal: $signal');
-    switch (signal.toUpperCase()) {
-      case 'FIRE':
-        await _sendNotification(
-          title: '🔥 تحذير حريق!',
-          body: 'تم اكتشاف صوت جرس الحريق',
-          id: 1,
-        );
-        break;
-      case 'BABY':
-        await _sendNotification(
-          title: '👶 بكاء طفل!',
-          body: 'تم اكتشاف بكاء طفل',
-          id: 2,
-        );
-        break;
-      case 'ATHAN':
-        await _sendNotification(
-          title: '🕌 أذان!',
-          body: 'حان وقت الصلاة',
-          id: 3,
-        );
-        break;
-      case 'BG':
-      case 'BACKGROUND':
-        await _analyzeWithYamnet();
-        break;
-      default:
-        await _sendNotification(
-          title: '🔔 صوت مخصص!',
-          body: 'تم اكتشاف: $signal',
-          id: 4,
-        );
+    // ESP32 may send "CONNECTED" or similar — show phone notification
+    if (signal.toUpperCase() == 'CONNECTED') {
+      await _sendNotification(
+        title: '🔗 PulseHear متصل',
+        body: 'تم الاتصال بالجهاز ${bleService.deviceName}',
+        id: 99,
+      );
     }
   }
 
-  Future<void> _analyzeWithYamnet() async {
-    if (isListening) return;
-    if (!await _recorder.hasPermission()) {
-      debugPrint('[BleAudioService] No mic permission');
+  // ── Receive raw audio from ESP32, classify with YAMNet ──────────
+  Future<void> _handleAudioFromESP32(Uint8List audioBytes) async {
+    if (isProcessing) {
+      debugPrint('[BleAudioService] Still processing — skipping');
       return;
     }
-    isListening = true;
-    notifyListeners();
-    try {
-      final stream = await _recorder.startStream(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
-      );
-      final List<int> audioBytes = [];
-      StreamSubscription? sub;
-      sub = stream.listen((chunk) {
-        audioBytes.addAll(chunk);
-        if (audioBytes.length >= 31200) {
-          sub?.cancel();
-          _recorder.stop();
-          _classifyAudio(
-              Uint8List.fromList(audioBytes.take(31200).toList()));
-        }
-      });
-      Future.delayed(const Duration(seconds: 2), () {
-        if (isListening) {
-          sub?.cancel();
-          _recorder.stop();
-          if (audioBytes.isNotEmpty) {
-            _classifyAudio(Uint8List.fromList(audioBytes));
-          }
-        }
-      });
-    } catch (e) {
-      debugPrint('[BleAudioService] Record error: $e');
-      isListening = false;
-      notifyListeners();
-    }
-  }
 
-  void _classifyAudio(Uint8List audioBytes) async {
+    debugPrint('[BleAudioService] Received ${audioBytes.length} bytes from ESP32 — classifying...');
+    isProcessing = true;
+    notifyListeners();
+
     try {
-      final result = _yamnet.classify(audioBytes);
-      final label = result['label'] as String;
+      final result    = _yamnet.classify(audioBytes);
+      final label     = result['label'] as String;
       final confidence = (result['confidence'] as num).toDouble();
-      debugPrint('[YAMNet] $label ($confidence)');
-      lastYamnetLabel = label;
+
+      debugPrint('[YAMNet] $label (${(confidence * 100).toStringAsFixed(0)}%)');
+
+      lastYamnetLabel   = label;
+      lastDetectedLabel = label;
       bleService.lastDetectedLabel = label;
       notifyListeners();
-      if (confidence > 0.4 && _isHumanSound(label)) {
-        await _recognizeSpeechForKeywords();
-      } else if (confidence > 0.4 && label.isNotEmpty) {
-        _sendYamnetNotification(label, confidence);
+
+      // Send result back to ESP32 so it can display on OLED
+      final displayLabel = _friendlyLabel(label);
+      await bleService.sendResult(displayLabel);
+
+      // Also show notification on phone
+      if (confidence > 0.35) {
+        await _sendYamnetNotification(displayLabel, confidence);
       }
     } catch (e) {
-      debugPrint('[BleAudioService] Classify error: $e');
+      debugPrint('[BleAudioService] YAMNet error: $e');
+      await bleService.sendResult('UNKNOWN');
     } finally {
-      isListening = false;
+      isProcessing = false;
       notifyListeners();
     }
   }
 
-  bool _isHumanSound(String label) {
-    final humanLabels = [
-      'SPEECH', 'CONVERSATION', 'NARRATION', 'SPEECH_SYNTHESIZER',
-      'CHILD_SPEECH', 'MALE_SPEECH', 'FEMALE_SPEECH',
-      'VOCAL', 'VOICE', 'SHOUT', 'SCREAM', 'CRY', 'YELL',
-    ];
-    return humanLabels.any((h) => label.toUpperCase().contains(h));
-  }
-
-  Future<void> _recognizeSpeechForKeywords() async {
-    if (!_speechInitialized) return;
-    try {
-      await _speechToText.listen(
-        onResult: (result) {
-          lastRecognizedText = result.recognizedWords;
-          debugPrint('[SpeechToText] Recognized: $lastRecognizedText');
-          _checkForKeywords(lastRecognizedText);
-        },
-        localeId: 'ar_SA',
-        listenFor: const Duration(seconds: 3),
-        pauseFor: const Duration(seconds: 2),
-      );
-      Future.delayed(const Duration(seconds: 5), () {
-        if (_speechToText.isListening) {
-          _speechToText.stop();
-        }
-      });
-    } catch (e) {
-      debugPrint('[SpeechToText] Recognition error: $e');
-    }
-  }
-
-  void _checkForKeywords(String text) {
-    final lowerText = text.toLowerCase();
-    for (String keyword in keywords) {
-      if (lowerText.contains(keyword.toLowerCase())) {
-        debugPrint('[Keywords] Match found: $keyword');
-        _sendKeywordNotification(keyword, text);
-        break;
-      }
-    }
-  }
-
-  Future<void> _sendKeywordNotification(
-      String keyword, String fullText) async {
-    await _sendNotification(
-      title: '🚨 كلمة مفتاحية: $keyword',
-      body: 'تم اكتشاف: "$fullText"',
-      id: 20,
-    );
-  }
-
-  Future<void> _sendYamnetNotification(
-      String label, double confidence) async {
-    final Map<String, Map<String, String>> labels = {
-      'SIREN': {'title': '🚨 صفارة!', 'body': 'سمعت سيارة طوارئ أو إسعاف'},
-      'ALARM': {'title': '⏰ جرس تنبيه!', 'body': 'تم اكتشاف جرس تنبيه'},
-      'DOG': {'title': '🐕 نباح كلب!', 'body': 'هناك كلب بالقرب'},
-      'DOORBELL': {'title': '🔔 جرس الباب!', 'body': 'شخص يدق الباب'},
-      'MUSIC': {'title': '🎵 موسيقى', 'body': 'تم كشف موسيقى بالقرب'},
+  // ── Convert YAMNet label to friendly short text for OLED ────────
+  String _friendlyLabel(String label) {
+    const map = {
+      'SIREN':              'SIREN',
+      'CIVIL_DEFENSE_SIREN':'SIREN',
+      'AMBULANCE':          'AMBULANCE',
+      'POLICE_CAR':         'POLICE',
+      'ALARM':              'ALARM',
+      'SMOKE_ALARM':        'SMOKE ALARM',
+      'FIRE_ALARM':         'FIRE ALARM',
+      'DOG':                'DOG BARK',
+      'BARK':               'DOG BARK',
+      'DOORBELL':           'DOORBELL',
+      'KNOCK':              'KNOCK',
+      'TELEPHONE':          'PHONE RING',
+      'TELEPHONE_BELL_RINGING': 'PHONE RING',
+      'MUSIC':              'MUSIC',
+      'SPEECH':             'SPEECH',
+      'SCREAM':             'SCREAM',
+      'BABY_CRY':           'BABY CRY',
+      'CRY':                'CRY',
     };
-    final info = labels[label.toUpperCase()];
-    if (info != null) {
-      await _sendNotification(
-        title: info['title']!,
-        body: '${info['body']!} (${(confidence * 100).toStringAsFixed(0)}%)',
-        id: 10,
-      );
-    }
+    return map[label.toUpperCase()] ?? label;
+  }
+
+  // ── Notification for YAMNet result ───────────────────────────────
+  Future<void> _sendYamnetNotification(String label, double confidence) async {
+    final Map<String, Map<String, String>> labels = {
+      'SIREN':      {'title': '🚨 صفارة!',        'body': 'سمعت سيارة طوارئ أو إسعاف'},
+      'AMBULANCE':  {'title': '🚑 إسعاف!',         'body': 'سيارة إسعاف بالقرب'},
+      'POLICE':     {'title': '🚔 شرطة!',          'body': 'سيارة شرطة بالقرب'},
+      'ALARM':      {'title': '⏰ جرس تنبيه!',     'body': 'تم اكتشاف جرس تنبيه'},
+      'SMOKE ALARM':{'title': '💨 إنذار دخان!',    'body': 'تم اكتشاف إنذار دخان'},
+      'FIRE ALARM': {'title': '🔥 إنذار حريق!',    'body': 'تم اكتشاف إنذار حريق'},
+      'DOG BARK':   {'title': '🐕 نباح كلب!',      'body': 'هناك كلب بالقرب'},
+      'DOORBELL':   {'title': '🔔 جرس الباب!',     'body': 'شخص يدق الباب'},
+      'KNOCK':      {'title': '🚪 طرق باب!',       'body': 'شخص يطرق الباب'},
+      'PHONE RING': {'title': '📞 هاتف يرن!',      'body': 'هاتف يرن بالقرب'},
+      'MUSIC':      {'title': '🎵 موسيقى',         'body': 'تم كشف موسيقى بالقرب'},
+      'SCREAM':     {'title': '😱 صراخ!',          'body': 'تم سماع صوت صراخ'},
+      'BABY CRY':   {'title': '👶 بكاء طفل!',      'body': 'تم اكتشاف بكاء طفل'},
+    };
+
+    final info = labels[label];
+    final title = info?['title'] ?? '🔊 صوت مكتشف';
+    final body  = info != null
+        ? '${info['body']!} (${(confidence * 100).toStringAsFixed(0)}%)'
+        : '$label (${(confidence * 100).toStringAsFixed(0)}%)';
+
+    await _sendNotification(title: title, body: body, id: 10);
   }
 
   Future<void> _sendNotification({
@@ -321,24 +220,22 @@ class BleAudioService extends ChangeNotifier {
     await _notifications.show(id, title, body, details);
   }
 
+  // ── Keywords (kept for future use) ───────────────────────────────
+  List<String> get keywords => bleService.keywords;
+
   void addKeyword(String keyword) {
-    if (!keywords.contains(keyword)) {
-      keywords.add(keyword);
-      bleService.sendKeyword(keyword);
-      notifyListeners();
-    }
+    bleService.sendKeyword(keyword);
+    notifyListeners();
   }
 
   void removeKeyword(String keyword) {
-    keywords.remove(keyword);
+    bleService.keywords.remove(keyword);
     notifyListeners();
   }
 
   @override
   void dispose() {
-    _recorder.dispose();
     _yamnet.dispose();
-    _speechToText.cancel();
     super.dispose();
   }
 }
