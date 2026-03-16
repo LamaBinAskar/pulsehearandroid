@@ -82,9 +82,9 @@ class BluetoothService extends ChangeNotifier {
         if (!scanning && !isConnected) {
           isScanning = false;
           notifyListeners();
-          debugPrint('[BLE] Scan ended — retrying in 5s');
+          debugPrint('[BLE] Scan ended — retrying in 2s');
           _reconnectTimer?.cancel();
-          _reconnectTimer = Timer(const Duration(seconds: 5), _tryConnect);
+          _reconnectTimer = Timer(const Duration(seconds: 2), _tryConnect);
         }
       });
     } catch (e) {
@@ -114,7 +114,7 @@ class BluetoothService extends ChangeNotifier {
       await _connectionSub?.cancel();
       _connectionSub = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected) {
-          debugPrint('[BLE] Connection lost — reconnecting in 3s');
+          debugPrint('[BLE] Connection lost — reconnecting in 1s');
           _signalChar  = null;
           _keywordChar = null;
           _audioChar   = null;
@@ -124,7 +124,7 @@ class BluetoothService extends ChangeNotifier {
           _audioBuffer.clear();
           notifyListeners();
           _reconnectTimer?.cancel();
-          _reconnectTimer = Timer(const Duration(seconds: 3), _tryConnect);
+          _reconnectTimer = Timer(const Duration(seconds: 1), _tryConnect);
         }
       });
 

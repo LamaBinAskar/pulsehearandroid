@@ -138,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ElevatedButton(
                             onPressed: () {
                               if (!widget.service.isConnected) {
-                                widget.service.connectToESP32('XIAO_ESP32S3');
+                                widget.service.connectToESP32('PulseHear_v30');
                               }
                             },
                             style: ElevatedButton.styleFrom(
@@ -210,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-          // 4. Nav Bar
+          // 5. Nav Bar
           Container(
             height: 75,
             margin: const EdgeInsets.only(bottom: 25, left: 20, right: 20),
@@ -244,12 +244,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildDetectionCard() {
-    final label     = widget.service.lastDetectedLabel;
+    final label = widget.service.lastDetectedLabel;
     final isProcessing = widget.service.isProcessing;
 
-    // Pick colour based on what was detected
-    Color  cardColor;
-    Color  textColor = Colors.white;
+    Color cardColor;
+    Color textColor = Colors.white;
     String displayText;
     IconData icon;
 
@@ -269,6 +268,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       cardColor   = const Color(0xFFF57C00);
       displayText = label;
       icon        = Icons.child_care;
+    } else if (label.toUpperCase().contains('MIXED')) {
+      cardColor   = const Color(0xFFF57C00);
+      displayText = label;
+      icon        = Icons.warning_amber_rounded;
     } else {
       cardColor   = const Color(0xFF1565C0);
       displayText = label;

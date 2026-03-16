@@ -21,9 +21,26 @@ class BleAudioService extends ChangeNotifier {
 
   final WebSocketBroadcastServer _wsServer = WebSocketBroadcastServer();
 
-  bool   isProcessing     = false;
-  String lastYamnetLabel  = '';
+  bool   isProcessing      = false;
+  String lastYamnetLabel   = '';
   String lastDetectedLabel = '';
+
+  // Detection history — last 10 events, newest first
+  final List<Map<String, String>> detectionHistory = [];
+
+  void _addHistory(String label, String source) {
+    final now = DateTime.now();
+    final time = '${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}:${now.second.toString().padLeft(2,'0')}';
+    detectionHistory.insert(0, {'label': label, 'source': source, 'time': time});
+    if (detectionHistory.length > 10) detectionHistory.removeLast();
+  }
+
+  // Call this from dashboard test button to verify UI works
+  void simulateDetection(String label) {
+    lastDetectedLabel = label;
+    _addHistory(label, 'TEST');
+    notifyListeners();
+  }
 
   BleAudioService({
     required this.bleService,
@@ -138,6 +155,7 @@ class BleAudioService extends ChangeNotifier {
       case 'FIRE':
         lastDetectedLabel = 'FIRE ALARM';
         bleService.lastDetectedLabel = 'FIRE ALARM';
+        _addHistory('FIRE ALARM', 'ESP32');
         notifyListeners();
         _wsServer.broadcast('FIRE ALARM', 1.0);
         await _sendNotification(
@@ -149,6 +167,7 @@ class BleAudioService extends ChangeNotifier {
       case 'BABY':
         lastDetectedLabel = 'BABY CRYING';
         bleService.lastDetectedLabel = 'BABY CRYING';
+        _addHistory('BABY CRYING', 'ESP32');
         notifyListeners();
         _wsServer.broadcast('BABY CRYING', 1.0);
         await _sendNotification(
@@ -160,6 +179,7 @@ class BleAudioService extends ChangeNotifier {
       case 'MIXED':
         lastDetectedLabel = 'MIXED ALARM';
         bleService.lastDetectedLabel = 'MIXED ALARM';
+        _addHistory('MIXED ALARM', 'ESP32');
         notifyListeners();
         _wsServer.broadcast('MIXED ALARM', 1.0);
         await _sendNotification(
@@ -195,6 +215,7 @@ class BleAudioService extends ChangeNotifier {
       lastYamnetLabel   = label;
       lastDetectedLabel = label;
       bleService.lastDetectedLabel = label;
+      _addHistory(label, 'YAMNet');
       notifyListeners();
 
       // Send result back to ESP32 so it can display on OLED
